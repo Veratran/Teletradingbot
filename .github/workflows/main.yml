@@ -26,8 +26,8 @@ jobs:
 
     - name: Run scheduled analysis
       env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ 7344243113:AAFCaUCJuzfk9PDa1Yz5zQpZoGPazgka5i8 }}
+        TELEGRAM_CHAT_ID: ${{ 6359400859 }}
       run: |
         # Modify scheduled_analysis_task.py to read from environment variables
         # Import os module
