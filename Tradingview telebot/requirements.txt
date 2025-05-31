@@ -1,5 +1,0 @@
-python-telegram-bot
-python-binance
-python-kucoin
-pandas
-numpy 
