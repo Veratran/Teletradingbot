@@ -56,6 +56,13 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Thêm các phân tích orderbook khác khi bạn mở rộng analyzer.py
             message += "\n"
 
+        # Mẫu hình nến
+        candlestick_patterns = analysis_result.get('candlestick_patterns', [])
+        if candlestick_patterns:
+            message += "**Mẫu hình nến:**\n"
+            message += f"- Các mẫu hình được nhận diện: {', '.join(candlestick_patterns) or 'Không có'}\n"
+            message += "\n"
+
         message += f"Thời gian phân tích: {pd.to_datetime(analysis_result['timestamp'], unit='ms')}\n"
         message += "--- Hết phân tích ---"
 

@@ -87,7 +87,23 @@ def calculate_rsi(data, period):
 # def calculate_macd(data, fast, slow, signal): ...
 # def calculate_bb(data, period, mult): ...
 
-# --- Orderbook Analysis (Helper Function) ---
+def calculate_body(data):
+    """Tính toán thân nến (giá đóng cửa - giá mở cửa)."""
+    return abs(data['close'] - data['open'])
+
+def calculate_sma(data, period, column='close'):
+    """Tính Simple Moving Average."""
+    return data[column].rolling(window=period).mean()
+
+def calculate_atr(data, period):
+    """Tính Average True Range (ATR)."""
+    # Công thức True Range: max[(high - low), abs(high - close[1]), abs(low - close[1])]
+    tr1 = data['high'] - data['low']
+    tr2 = abs(data['high'] - data['close'].shift(1))
+    tr3 = abs(data['low'] - data['close'].shift(1))
+    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = true_range.ewm(span=period, adjust=False).mean() # Thường dùng EMA cho ATR
+    return atr
 
 def analyze_orderbook_snapshot(orderbook):
     """Phân tích orderbook snapshot để tìm dấu hiệu MM/cá mập (dùng trong lớp)."""
@@ -239,6 +255,45 @@ class SymbolAnalyzer:
         # return self.run_analysis() # Example: analyze on every orderbook update (might be too frequent)
         return None # By default, don't analyze on every orderbook delta
 
+    def detect_candlestick_patterns(self, data):
+        """Nhận diện các mẫu hình nến cơ bản cho nến cuối cùng."""
+        patterns = []
+        if data.empty or len(data) < 2: # Cần ít nhất 1 nến để phân tích mẫu hình của nến cuối
+            return patterns
+
+        # Lấy nến cuối cùng và nến trước đó
+        last_candle = data.iloc[-1]
+        # prev_candle = data.iloc[-2] # Có thể cần nến trước đó cho một số mẫu hình
+
+        open_p = last_candle['open']
+        close_p = last_candle['close']
+        high_p = last_candle['high']
+        low_p = last_candle['low']
+
+        body = abs(close_p - open_p)
+        range_ = high_p - low_p
+
+        # --- Nhận diện mẫu hình cơ bản ---
+
+        # Doji: open và close rất gần nhau, bóng nến trên và dưới tương đối dài
+        # Điều kiện đơn giản: thân nến nhỏ hơn 10% tổng range và range > 2 * body
+        if range_ > 0 and body < 0.1 * range_ and range_ > 2 * body:
+             patterns.append('Doji')
+
+        # Hammer/Hanging Man: Thân nến nhỏ ở phía trên/dưới, bóng dưới dài gấp đôi thân nến
+        # Hammer (trong xu hướng giảm): thân nến nhỏ ở phía trên, bóng dưới dài
+        # Hanging Man (trong xu hướng tăng): thân nến nhỏ ở phía trên, bóng dưới dài
+        # simplified check: small body, lower shadow >= 2 * body
+        lower_shadow = min(open_p, close_p) - low_p
+        upper_shadow = high_p - max(open_p, close_p)
+        if body < 0.2 * range_ and lower_shadow >= 2 * body:
+            # Có thể phân biệt Hammer/Hanging Man dựa vào xu hướng trước đó, nhưng ở đây chỉ nhận diện hình dạng nến
+            patterns.append('Hammer/Hanging Man')
+
+        # Thêm các mẫu hình khác tại đây (Engulfing, Morning Star, etc.)
+        # Cần thêm logic để so sánh với nến trước đó cho nhiều mẫu hình.
+
+        return patterns
 
     def run_analysis(self, on_tick=False):
         """Run analysis on current data and generate signal message if conditions met."""
@@ -252,8 +307,8 @@ class SymbolAnalyzer:
         # --- Analyze Price Action (Replicate Pine Script) ---
         price_analysis_df = self.candles_df.copy() # Use the full history for indicator calculation
         price_analysis_df['RSI'] = calculate_rsi(price_analysis_df, 14)
-        price_analysis_df['body'] = abs(price_analysis_df['close'] - price_analysis_df['open'])
-        price_analysis_df['body_sma'] = price_analysis_df['body'].rolling(window=20).mean()
+        price_analysis_df['body'] = calculate_body(price_analysis_df)
+        price_analysis_df['body_sma'] = calculate_sma(price_analysis_df, 20)
 
         # Get latest bar's price signals
         latest_bar = price_analysis_df.iloc[-1]
@@ -314,7 +369,33 @@ class SymbolAnalyzer:
             signal_message = "\n".join(message_parts)
             logging.info(f"Generated signal for {self.symbol}: {signal_message}")
 
-        return signal_message
+        # Phân tích mẫu hình nến
+        candlestick_patterns = self.detect_candlestick_patterns(current_candles)
+
+        analysis_results = {
+            'symbol': self.symbol,
+            'source': self.source,
+            'timestamp': int(time.time() * 1000),
+            'latest_price_signals': latest_signals,
+            'orderbook_analysis': orderbook_analysis,
+            'candlestick_patterns': candlestick_patterns,
+        }
+
+        # Logic tạo tín hiệu
+        signal_message = None
+        # Ví dụ: Tạo tín hiệu nếu có Doji và RSI oversold
+        if 'Doji' in candlestick_patterns and latest_signals.get('RSI_Oversold', False):
+             signal_message = f"[{self.symbol}] Tín hiệu tiềm năng: Doji xuất hiện trong vùng RSI Oversold."
+
+        # Thêm các logic tạo tín hiệu khác dựa trên các phân tích
+
+        if signal_message:
+            # Trả về kết quả phân tích đầy đủ cùng với tín hiệu
+            return analysis_results
+        else:
+             # Trả về kết quả phân tích mà không có tín hiệu cụ thể
+             # Bạn có thể chọn không trả về gì nếu không có tín hiệu, hoặc trả về kết quả phân tích raw
+            return analysis_results # Tạm thời trả về kết quả phân tích kể cả khi không có tín hiệu
 
 # Hàm get_combined_analysis cũ (dùng cho lệnh /analyze) vẫn giữ lại
 def get_combined_analysis(symbol, interval, limit, orderbook_limit, source='binance'):

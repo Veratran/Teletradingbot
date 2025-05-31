@@ -1,4 +1,3 @@
-
 # Telegram Bot API Token - Lấy từ BotFather trên Telegram
 TELEGRAM_BOT_TOKEN = "7344243113:AAFCaUCJuzfk9PDa1Yz5zQpZoGPazgka5i8"
 
